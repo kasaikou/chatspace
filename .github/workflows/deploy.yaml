@@ -38,7 +38,7 @@ jobs:
             type=schedule,pattern={{date 'YYYYMMDD-HHmmss' }},prefix=at-
             type=raw,value=${{ env.TAG }}
       - name: 
-        uses: docker/buid-push-action@v3
+        uses: docker/build-push-action@v3
         with:
           push: true
           context: .
