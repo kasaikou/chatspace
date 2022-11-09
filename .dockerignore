@@ -1,0 +1,8 @@
+.devcontainer
+.git
+.github
+.dockerignore
+Dockerfile
+*.md
+*.yml
+*.yaml
