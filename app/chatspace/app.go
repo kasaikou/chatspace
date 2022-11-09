@@ -1,66 +1,71 @@
 package chatspace
 
 import (
-	"errors"
 	"fmt"
+	"io"
 	"sync"
 
+	"github.com/bwmarrin/discordgo"
+	"github.com/streamwest-1629/chatspace/app/chatspace/lib"
 	"github.com/streamwest-1629/chatspace/service/discord"
+	"github.com/streamwest-1629/chatspace/util"
 	"go.uber.org/zap"
 )
 
-var ErrAlreadyClosed = errors.New("application have been already closed")
-
-type AppController struct {
-	closed bool
-	closer chan<- *sync.WaitGroup
+type app struct {
+	lock             sync.Mutex
+	closed           bool
+	closer           chan<- *sync.WaitGroup
+	logger           *zap.Logger
+	scheduler        *lib.Scheduler
+	launchedStates   map[string]launchState
+	voiceChannelName string
 }
 
-func New(baseLogger *zap.Logger, discordToken, voiceChannelName string) (*AppController, error) {
+func New(baseLogger *zap.Logger, discordToken, voiceChannelName string) (io.Closer, error) {
 
 	sess, err := discord.New(discordToken)
 	if err != nil {
 		return nil, err
 	}
-	messageCreate, err := discord.ListenMessageCreate(sess, true)
+	messageCreate, messageCreateCloser, err := discord.ListenMessageCreate(sess, true)
 	if err != nil {
 		return nil, err
 	}
-	voiceStateUpdate, err := discord.ListenVoiceStateUpdate(sess, true)
+	voiceStateUpdate, voiceStateUpdateCloser, err := discord.ListenVoiceStateUpdate(sess, true)
 	if err != nil {
 		return nil, err
 	}
 
 	closer := make(chan *sync.WaitGroup, 1)
-	controller := &AppController{
-		closed: false,
-		closer: closer,
+
+	app := &app{
+		closed:         false,
+		closer:         make(chan<- *sync.WaitGroup, 1),
+		logger:         baseLogger.With(zap.String("app", "chatspace")),
+		scheduler:      lib.NewScheduler(),
+		launchedStates: make(map[string]launchState),
 	}
 
 	go func() {
-		logger := baseLogger.With(zap.String("app", "chatspace"))
-
+		logger := app.logger.With(zap.String("service", "discord-event-listener"))
 		for {
 			select {
 			case wg := <-closer:
+				logger.Debug("try to guracefully shutdown")
 				defer wg.Done()
-				controller.closed = true
 				sess.Close()
+				messageCreateCloser.Close()
+				voiceStateUpdateCloser.Close()
 				return
 
-			case message := <-messageCreate:
-				sess := message.Content.Session
+			case event := <-messageCreate:
+				logger.Debug("listen messageCreate event")
+				app.messageCreate(event)
 
-			case state := <-voiceStateUpdate:
-				sess := state.Content.Session
-				ch, err := sess.Channel(state.Event.ChannelID)
-
-				if err != nil {
-					logger.Error("cannot get channel", zap.Error(err))
-					break
-				} else if ch.Name != voiceChannelName {
-					break
-				}
+			case event := <-voiceStateUpdate:
+				logger.Debug("listen voiceStateUpdate event")
+				app.voiceStateUpdate(event)
 			}
 		}
 	}()
@@ -68,5 +73,100 @@ func New(baseLogger *zap.Logger, discordToken, voiceChannelName string) (*AppCon
 	if err := sess.Open(); err != nil {
 		return nil, fmt.Errorf("cannot open discord session: %w", err)
 	}
-	return controller, nil
+	return app, nil
+}
+
+func (a *app) Close() error {
+	a.logger.Info("close application")
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	if a.closed {
+		return fmt.Errorf("application %w", util.ErrAlreadyClosed)
+	}
+
+	a.scheduler.Close()
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	a.closer <- &wg
+	wg.Wait()
+
+	a.closed = true
+	a.logger.Info("gracefully close application")
+	return nil
+}
+
+func (a *app) messageCreate(event discord.Event[discordgo.MessageCreate]) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	if a.closed {
+		a.logger.Warn("event recieved after application closed")
+		return
+	}
+
+	// FUTURE FEATURE: Read aloud in joined voice channel
+
+	return
+}
+
+func (a *app) voiceStateUpdate(event discord.Event[discordgo.VoiceStateUpdate]) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	logger := a.logger.With(zap.String("GuildID", event.Content.GuildID))
+	if a.closed {
+		logger.Warn("event recieved after application closed")
+		return
+	}
+
+	sess := event.Content.Session
+	currentChannelID, prevChannelID := event.Event.ChannelID, event.Event.BeforeUpdate.ChannelID
+	if currentChannelID == prevChannelID {
+		// If currentChannelID and prevChannelID are equal, it maybe mean change mute.
+		logger.Debug("currentChannelID and prevChannelID are equal", zap.String("ChannelID", currentChannelID))
+		return
+	}
+
+	move := 0
+
+	if currentChannelID != "" {
+		currentChannel, err := sess.Channel(currentChannelID)
+		if err != nil {
+			logger.Error("cannot get discord channel information", zap.Error(err), zap.String("ChannelID", currentChannelID))
+		} else if currentChannel.Name == a.voiceChannelName {
+			move++
+		}
+	}
+
+	if prevChannelID != "" {
+		prevChannel, err := sess.Channel(prevChannelID)
+		if err != nil {
+			logger.Error("cannot get dicord channel information", zap.Error(err), zap.String("ChannelID", prevChannelID))
+		} else if prevChannel.Name == a.voiceChannelName {
+			move--
+		}
+	}
+
+	switch move {
+	case 1:
+		launchedStatus, exist := a.launchedStates[event.Content.GuildID]
+		if !exist {
+			logger.Debug("detected to join workspace voice channel, create workspace")
+			// TODO: create workspace
+
+		} else {
+			// TODO: increase join voice member
+
+		}
+
+	case -1:
+		launchedStatus, exist := a.launchedStates[event.Content.GuildID]
+		if !exist {
+			logger.Warn("detected to leave workspace voice channel, but stopped voice channel")
+			return
+		} else {
+			// TODO: decrease join voice member
+		}
+	}
+
+	return
 }
