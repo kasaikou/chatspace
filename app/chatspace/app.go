@@ -18,7 +18,7 @@ type app struct {
 	closer           chan<- *sync.WaitGroup
 	logger           *zap.Logger
 	scheduler        *lib.Scheduler
-	launchedStates   map[string]launchState
+	launchedStates   map[string]*launchState
 	voiceChannelName string
 }
 
@@ -44,7 +44,7 @@ func New(baseLogger *zap.Logger, discordToken, voiceChannelName string) (io.Clos
 		closer:         make(chan<- *sync.WaitGroup, 1),
 		logger:         baseLogger.With(zap.String("app", "chatspace")),
 		scheduler:      lib.NewScheduler(),
-		launchedStates: make(map[string]launchState),
+		launchedStates: make(map[string]*launchState),
 	}
 
 	go func() {
@@ -104,8 +104,6 @@ func (a *app) messageCreate(event discord.Event[discordgo.MessageCreate]) {
 	}
 
 	// FUTURE FEATURE: Read aloud in joined voice channel
-
-	return
 }
 
 func (a *app) voiceStateUpdate(event discord.Event[discordgo.VoiceStateUpdate]) {
@@ -127,12 +125,14 @@ func (a *app) voiceStateUpdate(event discord.Event[discordgo.VoiceStateUpdate]) 
 	}
 
 	move := 0
+	var channel *discordgo.Channel
 
 	if currentChannelID != "" {
 		currentChannel, err := sess.Channel(currentChannelID)
 		if err != nil {
 			logger.Error("cannot get discord channel information", zap.Error(err), zap.String("ChannelID", currentChannelID))
 		} else if currentChannel.Name == a.voiceChannelName {
+			channel = currentChannel
 			move++
 		}
 	}
@@ -142,6 +142,7 @@ func (a *app) voiceStateUpdate(event discord.Event[discordgo.VoiceStateUpdate]) 
 		if err != nil {
 			logger.Error("cannot get dicord channel information", zap.Error(err), zap.String("ChannelID", prevChannelID))
 		} else if prevChannel.Name == a.voiceChannelName {
+			channel = prevChannel
 			move--
 		}
 	}
@@ -150,13 +151,17 @@ func (a *app) voiceStateUpdate(event discord.Event[discordgo.VoiceStateUpdate]) 
 	case 1:
 		launchedStatus, exist := a.launchedStates[event.Content.GuildID]
 		if !exist {
-			logger.Debug("detected to join workspace voice channel, create workspace")
+			logger.Debug("detected to join closed workspace voice channel")
 			// TODO: create workspace
-
-		} else {
-			// TODO: increase join voice member
-
+			launchedStatus, err := newLaunchState(sess, a.logger, event.Content.GuildID, channel, channel)
+			if err != nil {
+				logger.Error("launch workspace voice channel", zap.Error(err))
+				return
+			}
+			a.launchedStates[event.Content.GuildID] = launchedStatus
 		}
+		// TODO: increase join voice member
+		launchedStatus.joinVoiceChannel(sess, event.Content.Actor)
 
 	case -1:
 		launchedStatus, exist := a.launchedStates[event.Content.GuildID]
@@ -164,9 +169,7 @@ func (a *app) voiceStateUpdate(event discord.Event[discordgo.VoiceStateUpdate]) 
 			logger.Warn("detected to leave workspace voice channel, but stopped voice channel")
 			return
 		} else {
-			// TODO: decrease join voice member
+			launchedStatus.leaveVoiceChannel(sess, event.Content.Actor)
 		}
 	}
-
-	return
 }
