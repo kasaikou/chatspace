@@ -9,7 +9,7 @@ const (
 )
 
 type launchState struct {
-	status        status
-	workMemberIDs []string
-	chatCha
+	status         status
+	workMemberIDs  []string
+	chatChannelIDs []string
 }
