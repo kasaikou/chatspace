@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type scheduler struct {
+type Scheduler struct {
 	lock      sync.Mutex
 	schedules []schedule
 }
@@ -15,8 +15,8 @@ type schedule struct {
 	call func()
 }
 
-func newScheduler() *scheduler {
-	scheduler := &scheduler{
+func NewScheduler() *Scheduler {
+	scheduler := &Scheduler{
 		schedules: []schedule{},
 	}
 
@@ -68,7 +68,7 @@ func newScheduler() *scheduler {
 	return scheduler
 }
 
-func (s *scheduler) CreateEventAt(at time.Time, call func()) {
+func (s *Scheduler) CreateEventAt(at time.Time, call func()) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	if s.schedules == nil {
@@ -81,7 +81,7 @@ func (s *scheduler) CreateEventAt(at time.Time, call func()) {
 	})
 }
 
-func (s *scheduler) CreateEventAfter(duration time.Duration, call func()) {
+func (s *Scheduler) CreateEventAfter(duration time.Duration, call func()) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	if s.schedules == nil {
@@ -94,7 +94,7 @@ func (s *scheduler) CreateEventAfter(duration time.Duration, call func()) {
 	})
 }
 
-func (s *scheduler) Close() error {
+func (s *Scheduler) Close() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.schedules = nil
