@@ -2,8 +2,10 @@ package discord
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/streamwest-1629/chatspace/util"
 )
 
 type ManagedEvent interface {
@@ -38,11 +40,11 @@ func appOwnID(sess *discordgo.Session) (string, error) {
 // Listened event will be send to channel, it is return value.
 //
 // If ignoreSelf is true, listener will be skip to send event created by application's own acts.
-func ListenMessageCreate(sess *discordgo.Session, ignoreSelf bool) (<-chan Event[discordgo.MessageCreate], error) {
+func ListenMessageCreate(sess *discordgo.Session, ignoreSelf bool) (<-chan Event[discordgo.MessageCreate], io.Closer, error) {
 
 	appID, err := appOwnID(sess)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	listener := make(chan Event[discordgo.MessageCreate])
 
@@ -60,18 +62,18 @@ func ListenMessageCreate(sess *discordgo.Session, ignoreSelf bool) (<-chan Event
 		}
 	})
 
-	return listener, nil
+	return listener, util.WrapChannelCloser(listener), nil
 }
 
 // Set discord message create event listener.
 // Listened event will be send to channel, it is return value.
 //
 // If ignoreSelf is true, listener will be skip to send event created by application's own acts.
-func ListenVoiceStateUpdate(sess *discordgo.Session, ignoreSelf bool) (<-chan Event[discordgo.VoiceStateUpdate], error) {
+func ListenVoiceStateUpdate(sess *discordgo.Session, ignoreSelf bool) (<-chan Event[discordgo.VoiceStateUpdate], io.Closer, error) {
 
 	appID, err := appOwnID(sess)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	listener := make(chan Event[discordgo.VoiceStateUpdate])
 
@@ -88,4 +90,6 @@ func ListenVoiceStateUpdate(sess *discordgo.Session, ignoreSelf bool) (<-chan Ev
 			Event: *content,
 		}
 	})
+
+	return listener, util.WrapChannelCloser(listener), nil
 }
