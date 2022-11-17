@@ -3,7 +3,7 @@ FROM debian:bullseye
 LABEL maintainer="Kasai Kou"
 
 ARG apt_get_server=ftp.jaist.ac.jp/pub/Linux
-ARG golang_version=1.18
+ARG golang_version=1.19
 ARG username=vscode
 ARG useruid=1000
 ARG usergid=${useruid}
