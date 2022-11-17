@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Scheduler for switching chatspace state (work/chat mode) and talk bot.
 type Scheduler struct {
 	lock      sync.Mutex
 	schedules []schedule
@@ -15,6 +16,7 @@ type schedule struct {
 	call func()
 }
 
+// Make Scheduler instance and a goroutine for check schedule checker.
 func NewScheduler() *Scheduler {
 	scheduler := &Scheduler{
 		schedules: []schedule{},
@@ -68,6 +70,7 @@ func NewScheduler() *Scheduler {
 	return scheduler
 }
 
+// Create schedule with [time.Time] and event handler.
 func (s *Scheduler) CreateEventAt(at time.Time, call func()) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -81,6 +84,7 @@ func (s *Scheduler) CreateEventAt(at time.Time, call func()) {
 	})
 }
 
+// Create schedule with [time.Duration] from now and event handler.
 func (s *Scheduler) CreateEventAfter(duration time.Duration, call func()) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
