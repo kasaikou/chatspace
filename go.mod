@@ -1,6 +1,6 @@
 module github.com/streamwest-1629/chatspace
 
-go 1.18
+go 1.19
 
 require (
 	go.uber.org/atomic v1.7.0 // indirect
