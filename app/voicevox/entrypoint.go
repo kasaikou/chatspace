@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/streamwest-1629/chatspace/lib/voicevox"
+	"go.uber.org/zap"
 )
 
 type InitConfig = voicevox.InitConfig
@@ -16,7 +16,7 @@ type InitConfig = voicevox.InitConfig
 type VoiceVox struct {
 	client      *voicevox.Client
 	restartLock sync.RWMutex
-	logger      zerolog.Logger
+	logger      *zap.Logger
 	config      voicevox.InitConfig
 	genQueue    chan<- generateSpeakerConfig
 	reloadQueue chan<- func()
@@ -57,7 +57,7 @@ var (
 	ErrUnknownSpeaker = errors.New("unknown speaker")
 )
 
-func Start(appLogger zerolog.Logger, corePath, jTalkDir string, config voicevox.InitConfig) (*VoiceVox, error) {
+func Start(appLogger *zap.Logger, corePath, jTalkDir string, config voicevox.InitConfig) (*VoiceVox, error) {
 
 	client, err := voicevox.LoadLib(corePath, jTalkDir)
 	if err != nil {
@@ -104,7 +104,7 @@ func Start(appLogger zerolog.Logger, corePath, jTalkDir string, config voicevox.
 				defer wg.Done()
 				err := client.Close()
 				if err != nil {
-					appLogger.Error().Err(err).Msg("failed to close voicevox client")
+					appLogger.Error("failed to close voicevox client", zap.Error(err))
 				}
 				return
 
@@ -114,14 +114,14 @@ func Start(appLogger zerolog.Logger, corePath, jTalkDir string, config voicevox.
 
 					for {
 						if _, err := v.client.Open(v.config); err != nil {
-							v.logger.Error().Err(err).Msg("failed to reopen voice client, retry after 10 seconds")
+							v.logger.Error("failed to reopen voice client, retry after 10 seconds", zap.Error(err))
 							time.Sleep(10 * time.Second)
 						} else {
 							break
 						}
 					}
 
-					v.logger.Info().Msg("successfully reopen voice client")
+					v.logger.Info("successfully reopen voice client")
 
 					loadInfo := loadInfo{
 						speakerIdxNameMap: map[string]int{},
@@ -131,7 +131,7 @@ func Start(appLogger zerolog.Logger, corePath, jTalkDir string, config voicevox.
 					speakers := func() []voicevox.VoiceSpeaker {
 						for {
 							if s, err := v.client.GetVoiceSpeakers(); err != nil {
-								v.logger.Error().Err(err).Msg("failed load voice metadata or cannot parsed json file, retry after 10 seconds")
+								v.logger.Error("failed load voice metadata or cannot parsed json file, retry after 10 seconds", zap.Error(err))
 								time.Sleep(10 * time.Second)
 							} else {
 								return s
