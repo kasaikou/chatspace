@@ -52,8 +52,8 @@ func main() {
 	}
 
 	// chatspace application
-	discordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
-	// discordToken := environments["CHATSPACE_DISCORD_TOKEN"]
+	// discordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
+	discordToken := environments["CHATSPACE_DISCORD_TOKEN"]
 	controller, err := chatspace.NewService(logger, discordToken, vv)
 	if err != nil {
 		logger.Error("cannot start chatspace application", zap.String("discordToken", discordToken[:8]+"***"+discordToken[len(discordToken)-8:]), zap.Error(err))
