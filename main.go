@@ -9,6 +9,7 @@ import (
 	"github.com/streamwest-1629/chatspace/app/chatspace"
 	"github.com/streamwest-1629/chatspace/app/voicevox"
 	"github.com/streamwest-1629/chatspace/lib/s3"
+	"github.com/streamwest-1629/chatspace/util"
 	"go.uber.org/zap"
 )
 
@@ -52,8 +53,8 @@ func main() {
 	}
 
 	// chatspace application
-	// discordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
-	discordToken := environments["CHATSPACE_DISCORD_TOKEN"]
+	discordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
+	// discordToken := environments["CHATSPACE_DISCORD_TOKEN"]
 	controller, err := chatspace.NewService(logger, discordToken, vv)
 	if err != nil {
 		logger.Error("cannot start chatspace application", zap.String("discordToken", discordToken[:8]+"***"+discordToken[len(discordToken)-8:]), zap.Error(err))
@@ -68,19 +69,29 @@ func main() {
 func healthcheck(rw http.ResponseWriter, req *http.Request) {
 	logger.Debug("call healthcheck")
 
+	// current time
 	current := time.Now().UTC().Format(time.RFC3339)
 
+	// environment variables
 	envKeys := make([]string, 0, len(environments))
 	for k := range environments {
 		envKeys = append(envKeys, k)
 	}
 
+	var resources interface{}
+	resources, err := util.Utilization()
+	if err != nil {
+		resources = err.Error()
+	}
+
+	// format json
 	b, _ := json.Marshal(map[string]interface{}{
 		"currentTime": current,
 		"environments": map[string]interface{}{
 			"count": len(envKeys),
 			"keys":  envKeys,
 		},
+		"resources": resources,
 	})
 
 	rw.Header().Set("Content-Type", "application/json")
