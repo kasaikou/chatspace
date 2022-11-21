@@ -8,7 +8,6 @@ require (
 	github.com/gammazero/deque v0.2.1
 	github.com/google/uuid v1.3.0
 	github.com/rs/zerolog v1.28.0
-	github.com/streamwest-1629/permanent-apps v0.0.0-20220912005027-12e61be6dd1e
 	go.uber.org/zap v1.23.0
 )
 
