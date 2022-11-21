@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/streamwest-1629/chatspace/app/voicevox"
 	"go.uber.org/zap"
 )
 
@@ -21,7 +22,7 @@ type ServiceController struct {
 var ManagedChannelName = "もくもく"
 
 // Make a new ServiceController instance.
-func NewService(baseLogger *zap.Logger, discordToken string) (*ServiceController, error) {
+func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicevox.VoiceVox) (*ServiceController, error) {
 
 	// Initialize discord service
 	baseLogger = baseLogger.With(zap.String("package", "chatspace"))
@@ -105,7 +106,7 @@ func NewService(baseLogger *zap.Logger, discordToken string) (*ServiceController
 
 						if ch.Name == ManagedChannelName {
 							logger.Debug("request new chatspace server instance")
-							serverStatus, err := NewServerStatus(baseLogger, sess, schedules, event.GuildID, event.ChannelID)
+							serverStatus, err := NewServerStatus(baseLogger, sess, voicevoxApp, schedules, event.GuildID, event.ChannelID)
 							if err != nil {
 								logger.Error("failed new chatspace server instance", zap.Error(err))
 							} else {
