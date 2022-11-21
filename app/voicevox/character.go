@@ -10,7 +10,7 @@ type CharacterExpressions struct {
 	callMeLater []string
 }
 
-func CharacterExpression(characterName string) CharacterExpressions {
+func CharacterExpression(characterName string) *CharacterExpressions {
 
 	config := CharacterExpressions{
 		hello:       []string{"おはようございます", "こんにちは", "よろしくお願いします"},
@@ -31,7 +31,7 @@ func CharacterExpression(characterName string) CharacterExpressions {
 
 	characterConfig, exist := characterConfigs[characterName]
 	if !exist {
-		return config
+		return &config
 	}
 
 	if len(characterConfig.hello) > 0 {
@@ -50,7 +50,7 @@ func CharacterExpression(characterName string) CharacterExpressions {
 		config.callMeLater = characterConfig.callMeLater
 	}
 
-	return config
+	return &config
 }
 
 func (c *CharacterExpressions) Hello() string {
