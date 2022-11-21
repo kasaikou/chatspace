@@ -4,7 +4,6 @@ LABEL maintainer="Kasai Kou"
 
 ARG apt_get_server=ftp.jaist.ac.jp/pub/Linux
 ARG golang_version=1.19
-ARG golang_version=1.18
 ARG voicevox_version=0.13.0
 ARG onnxruntime_version=1.10.0
 ARG username=vscode
