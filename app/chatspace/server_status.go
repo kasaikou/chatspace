@@ -19,8 +19,8 @@ const (
 )
 
 const (
-	// timeStep = time.Minute
-	timeStep  = 4 * time.Second
+	timeStep = time.Minute
+	// timeStep  = 4 * time.Second
 	chatTimes = 15 * timeStep
 	workTimes = 45 * timeStep
 )
