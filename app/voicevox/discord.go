@@ -9,7 +9,7 @@ import (
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
+	"go.uber.org/zap"
 )
 
 type ManagedDiscordVoiceConnection struct {
@@ -17,9 +17,10 @@ type ManagedDiscordVoiceConnection struct {
 	ChannelID string
 	dvc       *DiscordVoiceConnection
 	vc        *discordgo.VoiceConnection
+	app       *VoiceVox
 }
 
-func StartManagedDiscordVoiceConnection(appLogger zerolog.Logger, sess *discordgo.Session, guildID, channelID string, voiceVox *VoiceVox, replaceFn func(input string) string) (*ManagedDiscordVoiceConnection, error) {
+func StartManagedDiscordVoiceConnection(appLogger *zap.Logger, sess *discordgo.Session, guildID, channelID string, voiceVox *VoiceVox, replaceFn func(input string) string) (*ManagedDiscordVoiceConnection, error) {
 	vc, err := sess.ChannelVoiceJoin(guildID, channelID, false, true)
 	if err != nil {
 		return nil, err
@@ -30,6 +31,7 @@ func StartManagedDiscordVoiceConnection(appLogger zerolog.Logger, sess *discordg
 		ChannelID: channelID,
 		dvc:       StartDiscordVoiceConnection(appLogger, vc, voiceVox, replaceFn),
 		vc:        vc,
+		app:       voiceVox,
 	}, nil
 }
 
@@ -46,6 +48,10 @@ func (m *ManagedDiscordVoiceConnection) Speak(speakerID int, waitSpeaked bool, c
 	m.dvc.Speak(speakerID, waitSpeaked, content)
 }
 
+func (m *ManagedDiscordVoiceConnection) GetSpeakers(nameFilter string, waitResume bool) ([]VoiceSpeaker, error) {
+	return m.app.GetSpeakers(nameFilter, waitResume)
+}
+
 type DiscordVoiceConnection struct {
 	quit          chan<- *sync.WaitGroup
 	generateQueue chan<- generateVoiceArgs
@@ -57,7 +63,7 @@ type generateVoiceArgs struct {
 	wg        *sync.WaitGroup
 }
 
-func StartDiscordVoiceConnection(appLogger zerolog.Logger, vc *discordgo.VoiceConnection, voiceVox *VoiceVox, replaceFn func(input string) string) *DiscordVoiceConnection {
+func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConnection, voiceVox *VoiceVox, replaceFn func(input string) string) *DiscordVoiceConnection {
 
 	type speakQueueArgs struct {
 		filename string
@@ -86,14 +92,14 @@ func StartDiscordVoiceConnection(appLogger zerolog.Logger, vc *discordgo.VoiceCo
 					tempDir := filepath.Join(filepath.Dir(os.Args[0]), "./.tmp/")
 					wav, err := voiceVox.GenerateVoice(args.content, args.speakerID, false)
 					if err != nil {
-						appLogger.Error().Err(err).Int("speakerId", args.speakerID).Msg("failed to generate voice")
+						appLogger.Error("failed to generate voice", zap.Int("speakerId", args.speakerID), zap.Error(err))
 						return false
 					}
 					defer wav.Close()
 
 					if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
 						if err != os.ErrExist {
-							appLogger.Error().Err(err).Msg("failed to mkdir")
+							appLogger.Error("failed to mkdir", zap.Error(err))
 							return false
 						}
 					}
@@ -101,13 +107,13 @@ func StartDiscordVoiceConnection(appLogger zerolog.Logger, vc *discordgo.VoiceCo
 					fileName := filepath.Join(tempDir, uuid.NewString()+".wav")
 					file, err := os.Create(fileName)
 					if err != nil {
-						appLogger.Error().Err(err).Str("filename", fileName).Msg("failed to create wave file")
+						appLogger.Error("failed to create wave file", zap.String("filename", fileName), zap.Error(err))
 						return false
 					}
 					defer file.Close()
 
 					if _, err := io.Copy(file, wav); err != nil {
-						appLogger.Error().Err(err).Str("filename", fileName).Msg("failed to save wave file")
+						appLogger.Error("failed to save wave file", zap.String("filename", fileName), zap.Error(err))
 						return false
 					}
 
@@ -116,7 +122,7 @@ func StartDiscordVoiceConnection(appLogger zerolog.Logger, vc *discordgo.VoiceCo
 						filename: fileName,
 						wg:       args.wg,
 					}:
-						appLogger.Debug().Msg("send speak file")
+						appLogger.Debug("send speak file")
 						return true
 					default:
 						os.Remove(fileName)
