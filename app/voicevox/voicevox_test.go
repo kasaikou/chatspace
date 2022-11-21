@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog/log"
-	"github.com/streamwest-1629/permanent-apps/apps/voicevox"
+	"github.com/streamwest-1629/chatspace/app/voicevox"
 	"github.com/streamwest-1629/permanent-apps/util"
 )
 
