@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/streamwest-1629/chatspace/app/chatspace"
+	"github.com/streamwest-1629/chatspace/app/voicevox"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +24,18 @@ func main() {
 	// healthcheck
 	logger.Debug("initialize application")
 	http.HandleFunc("/_hck", healthcheck)
+
+	config := voicevox.InitConfig{
+		NumThreads:    2,
+		LoadAllModels: true,
+	}
+
+	// voicevox application
+	vv, err := voicevox.Start(logger, os.Getenv("VOICEVOX_COREPATH"), os.Getenv("VOICEVOX_JTALKDIR"), config)
+	defer vv.Quit()
+	if _, err := vv.GetSpeakers("", true); err != nil {
+		logger.Fatal("cannot start voicevox application", zap.Error(err))
+	}
 
 	// chatspace application
 	discordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
