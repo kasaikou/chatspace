@@ -56,7 +56,7 @@ func NewService(baseLogger *zap.Logger, discordToken string) (*ServiceController
 
 		logger := baseLogger.With(zap.String("feature", "eventListener"))
 		schedules := NewScheduleQueue()
-		ticker := time.NewTicker(1 * timeStep)
+		ticker := time.NewTicker(timeStep / 4)
 		serverStatuses := map[string]*ServerStatus{}
 
 		for {
