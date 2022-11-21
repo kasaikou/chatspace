@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/bwmarrin/discordgo v0.26.1 // indirect
+	github.com/gammazero/deque v0.2.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
