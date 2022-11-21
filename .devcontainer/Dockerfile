@@ -36,6 +36,12 @@ RUN \
     git \
     zip \
     unzip \
+    gnupg \
+    lsb-release \
+    ffmpeg \
+    libogg0 \
+    libopus0 \
+    opus-tools \
     wget \
     sudo && \
     #
