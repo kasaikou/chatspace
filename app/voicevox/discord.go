@@ -53,8 +53,9 @@ func (m *ManagedDiscordVoiceConnection) GetSpeakers(nameFilter string, waitResum
 }
 
 type DiscordVoiceConnection struct {
-	quit          chan<- *sync.WaitGroup
-	generateQueue chan<- generateVoiceArgs
+	genQueueQuit   chan<- *sync.WaitGroup
+	speakQueueQuit chan<- *sync.WaitGroup
+	generateQueue  chan<- generateVoiceArgs
 }
 
 type generateVoiceArgs struct {
@@ -71,15 +72,16 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 	}
 
 	var (
-		quit          = make(chan *sync.WaitGroup)
-		generateQueue = make(chan generateVoiceArgs)
-		speakQueue    = make(chan speakQueueArgs)
+		genQueueQuit   = make(chan *sync.WaitGroup)
+		generateQueue  = make(chan generateVoiceArgs)
+		speakQueueQuit = make(chan *sync.WaitGroup)
+		speakQueue     = make(chan speakQueueArgs)
 	)
 
 	go func(queue chan<- speakQueueArgs) {
 		for {
 			select {
-			case wg := <-quit:
+			case wg := <-genQueueQuit:
 				defer wg.Done()
 				return
 
@@ -88,6 +90,8 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 					if replaceFn != nil {
 						args.content = replaceFn(args.content)
 					}
+
+					appLogger.Debug("voicevox generate request recieved", zap.String("content", args.content))
 
 					tempDir := filepath.Join(filepath.Dir(os.Args[0]), "./.tmp/")
 					wav, err := voiceVox.GenerateVoice(args.content, args.speakerID, false)
@@ -117,17 +121,12 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 						return false
 					}
 
-					select {
-					case speakQueue <- speakQueueArgs{
+					speakQueue <- speakQueueArgs{
 						filename: fileName,
 						wg:       args.wg,
-					}:
-						appLogger.Debug("send speak file")
-						return true
-					default:
-						os.Remove(fileName)
-						return false
 					}
+
+					return true
 				}()
 				if !sended {
 					if args.wg != nil {
@@ -141,9 +140,14 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 	go func(queue <-chan speakQueueArgs) {
 		for {
 			select {
-			case wg := <-quit:
+			case wg := <-genQueueQuit:
 				defer wg.Done()
-				return
+				select {
+				case args := <-queue:
+					os.Remove(args.filename)
+				default:
+					return
+				}
 			case args := <-queue:
 				dgvoice.PlayAudioFile(vc, args.filename, make(chan bool))
 				os.Remove(args.filename)
@@ -155,19 +159,21 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 	}(speakQueue)
 
 	return &DiscordVoiceConnection{
-		quit:          quit,
-		generateQueue: generateQueue,
+		genQueueQuit:   genQueueQuit,
+		speakQueueQuit: speakQueueQuit,
+		generateQueue:  generateQueue,
 	}
 }
 
 func (d *DiscordVoiceConnection) Quit() {
-	if d.quit != nil {
-		defer func() { d.quit = nil }()
+	if d.genQueueQuit != nil {
+		defer func() { d.genQueueQuit = nil }()
 		wg := sync.WaitGroup{}
-		for i := 0; i < 2; i++ {
-			wg.Add(1)
-			d.quit <- &wg
-		}
+		wg.Add(1)
+		d.genQueueQuit <- &wg
+		wg.Wait()
+		wg.Add(1)
+		d.speakQueueQuit <- &wg
 		wg.Wait()
 	}
 }
