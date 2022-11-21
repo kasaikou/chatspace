@@ -1,0 +1,10 @@
+open_jtalk_dic_*
+onnxruntime-*
+libonnxruntime.so.*
+core.h
+*.txt
+*.so
+VERSION
+*.tgz
+*.zip
+*.wav
