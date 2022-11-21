@@ -208,7 +208,7 @@ func (ss *ServerStatus) Switch2Work() {
 		}
 	}
 
-	nextTime := time.Now().Add(9 * time.Hour).Format("3時4分")
+	nextTime := time.Now().Add(9*time.Hour + workTimes).Format("3時4分")
 	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "作業時間となるのでミュートを行いました。")
 	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, fmt.Sprintf("次の作業時間は%sです。", nextTime))
 	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "しっかり作業を進めてください。")
@@ -251,7 +251,7 @@ func (ss *ServerStatus) Switch2Chat() {
 	}
 	ss.announceSpeaker = speakers[rand.Intn(len(speakers))]
 
-	nextTime := time.Now().Add(9 * time.Hour).Format("3時4分")
+	nextTime := time.Now().Add(9*time.Hour + chatTimes).Format("3時4分")
 	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "休憩時間となるのでミュートを解除しました。")
 	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, fmt.Sprintf("次の作業時間は%sです。", nextTime))
 	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "それまでしっかり休みましょう。")
