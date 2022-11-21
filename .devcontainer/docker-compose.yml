@@ -21,5 +21,7 @@ services:
 
     # Uncomment the next line to use a non-root user for all processes.
     user: vscode
+    env_file:
+      - ../.env
     # Use "forwardPorts" in **devcontainer.json** to forward an app port locally. 
     # (Adding the "ports" property to this file will not forward from a Codespace.)

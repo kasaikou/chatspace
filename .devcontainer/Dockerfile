@@ -4,6 +4,8 @@ LABEL maintainer="Kasai Kou"
 
 ARG apt_get_server=ftp.jaist.ac.jp/pub/Linux
 ARG golang_version=1.19
+ARG voicevox_version=0.13.0
+ARG onnxruntime_version=1.10.0
 ARG username=vscode
 ARG useruid=1000
 ARG usergid=${useruid}
@@ -15,6 +17,9 @@ ENV GOPATH=/home/${username}/go
 ENV PATH=${PATH}:/usr/local/go/bin
 ENV PATH=${PATH}:${GOPATH}/bin
 ENV SHELL=/bin/bash
+ENV VOICEVOX_PATH=/home/${username}/voicevox
+ENV VOICEVOX_COREPATH=${VOICEVOX_PATH}/libcore.so
+ENV VOICEVOX_JTALKDIR=${VOICEVOX_PATH}/open_jtalk_dic_utf_8
 
 WORKDIR /opt
 RUN \
@@ -31,6 +36,12 @@ RUN \
     git \
     zip \
     unzip \
+    gnupg \
+    lsb-release \
+    ffmpeg \
+    libogg0 \
+    libopus0 \
+    opus-tools \
     wget \
     sudo && \
     #
@@ -61,4 +72,18 @@ RUN go install golang.org/x/tools/gopls@latest && \
     go install github.com/cweill/gotests/gotests@latest && \
     go install github.com/ramya-rao-a/go-outline@latest && \
     go install golang.org/x/tools/cmd/godoc@latest && \
-    go install honnef.co/go/tools/cmd/staticcheck@latest
+    go install honnef.co/go/tools/cmd/staticcheck@latest && \
+    #
+    # Install Voicevox
+    wget https://github.com/VOICEVOX/voicevox_core/releases/download/${voicevox_version}/voicevox_core-linux-x64-cpu-${voicevox_version}.zip && \
+    wget https://github.com/microsoft/onnxruntime/releases/download/v${onnxruntime_version}/onnxruntime-linux-x64-${onnxruntime_version}.tgz && \
+    wget http://downloads.sourceforge.net/open-jtalk/open_jtalk_dic_utf_8-1.11.tar.gz && \
+    unzip voicevox_core-linux-x64-cpu-${voicevox_version}.zip && \
+    tar -zxvf onnxruntime-linux-x64-${onnxruntime_version}.tgz && \
+    tar -zxvf open_jtalk_dic_utf_8-1.11.tar.gz && \
+    mkdir -p ${VOICEVOX_PATH} && \
+    cp \
+    onnxruntime-linux-x64-${onnxruntime_version}/lib/libonnxruntime.so.${onnxruntime_version} \
+    voicevox_core-linux-x64-cpu-${voicevox_version}/libcore.so \
+    ${VOICEVOX_PATH} && \
+    cp -r open_jtalk_dic_utf_8-1.11 ${VOICEVOX_JTALKDIR}
