@@ -1,10 +1,12 @@
 package chatspace
 
 import (
+	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/streamwest-1629/chatspace/app/voicevox"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +28,7 @@ type ServerStatus struct {
 	logger            *zap.Logger
 	isClosed          bool
 	sess              *discordgo.Session
-	voiceConn         *discordgo.VoiceConnection
+	voiceConn         *voicevox.ManagedDiscordVoiceConnection
 	guildID           string
 	channelID         string
 	mode              serverStatusMode
@@ -35,19 +37,26 @@ type ServerStatus struct {
 	managedChannelIDs map[string]struct{}
 }
 
-func NewServerStatus(baseLogger *zap.Logger, sess *discordgo.Session, scheduler *ScheduleQueue, guildID, channelID string) (*ServerStatus, error) {
+func NewServerStatus(baseLogger *zap.Logger, sess *discordgo.Session, voicevoxApp *voicevox.VoiceVox, scheduler *ScheduleQueue, guildID, channelID string) (*ServerStatus, error) {
 
-	vc, err := sess.ChannelVoiceJoin(guildID, channelID, false, true)
+	// vc, err := sess.ChannelVoiceJoin(guildID, channelID, false, true)
+	baseLogger = baseLogger.With(
+		zap.Time("launchAt", time.Now().UTC()),
+		zap.String("guildID", guildID),
+	)
+
+	vc, err := voicevox.StartManagedDiscordVoiceConnection(
+		baseLogger.With(zap.String("feature", "voicevoxRequest")),
+		sess, guildID, channelID, voicevoxApp,
+		func(input string) string { return input },
+	)
+
 	if err != nil {
 		return nil, err
 	}
 
 	ss := &ServerStatus{
-		logger: baseLogger.With(
-			zap.String("feature", "serverStatus"),
-			zap.Time("launchAt", time.Now().UTC()),
-			zap.String("guildID", guildID),
-		),
+		logger:            baseLogger.With(zap.String("feature", "serverStatus")),
 		sess:              sess,
 		voiceConn:         vc,
 		guildID:           guildID,
@@ -57,6 +66,14 @@ func NewServerStatus(baseLogger *zap.Logger, sess *discordgo.Session, scheduler 
 		managedChannelIDs: make(map[string]struct{}),
 	}
 
+	speakers, err := ss.voiceConn.GetSpeakers("", true)
+	if err != nil {
+		ss.logger.Error("cannot get speaker status", zap.Error(err))
+	}
+
+	speaker := speakers[rand.Intn(len(speakers))]
+
+	ss.voiceConn.Speak(speaker.Id, false, voicevox.CharacterExpression(speaker.Character).Hello())
 	if msg, err := ss.sess.ChannelMessageSendEmbed(ss.channelID, &discordgo.MessageEmbed{
 		Title:       "💕よろしくおねがいします！",
 		Description: "この度は来てくださりありがとうございます。しっかり作業部屋を運営してまいりますのでよろしくお願いします。",
@@ -198,5 +215,6 @@ func (ss *ServerStatus) Close() error {
 	}); err != nil {
 		ss.logger.Error("failed send message", zap.String("channelID", msg.ChannelID), zap.Error(err))
 	}
-	return ss.voiceConn.Disconnect()
+	ss.voiceConn.Close()
+	return nil
 }
