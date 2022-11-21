@@ -78,7 +78,7 @@ func NewServerStatus(baseLogger *zap.Logger, sess *discordgo.Session, voicevoxAp
 
 	ss.announceSpeaker = speakers[rand.Intn(len(speakers))]
 
-	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, voicevox.CharacterExpression(ss.announceSpeaker.Character).Hello())
+	ss.voiceConn.Speak(ss.announceSpeaker.Id, true, voicevox.CharacterExpression(ss.announceSpeaker.Character).Hello())
 	if msg, err := ss.sess.ChannelMessageSendEmbed(ss.channelID, &discordgo.MessageEmbed{
 		Title:       "💕よろしくおねがいします！",
 		Description: "この度は来てくださりありがとうございます。しっかり作業部屋を運営してまいりますのでよろしくお願いします。",
@@ -113,7 +113,11 @@ func (ss *ServerStatus) onMessageCreate(sess *discordgo.Session, event *discordg
 			ss.memberVoiceIDs[userId] = id
 		}
 
-		ss.voiceConn.Speak(id, false, event.ContentWithMentionsReplaced())
+		splited := spliter(event.ContentWithMentionsReplaced())
+
+		for _, split := range splited {
+			ss.voiceConn.Speak(id, false, split)
+		}
 
 	case serverStatusModeWork:
 		user, err := sess.GuildMember(ss.guildID, event.Author.ID)
@@ -131,7 +135,9 @@ func (ss *ServerStatus) onMessageCreate(sess *discordgo.Session, event *discordg
 			"頑張ってください",
 			"手を動かすんです",
 		}
-		ss.voiceConn.Speak(ss.announceSpeaker.Id, false, fmt.Sprintf("%s、%s", nick, comments[rand.Intn(len(comments))]))
+
+		ss.voiceConn.Speak(ss.announceSpeaker.Id, false, nick)
+		ss.voiceConn.Speak(ss.announceSpeaker.Id, false, comments[rand.Intn(len(comments))])
 	}
 }
 
@@ -203,7 +209,9 @@ func (ss *ServerStatus) Switch2Work() {
 	}
 
 	nextTime := time.Now().Add(9 * time.Hour).Format("3時4分")
-	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, fmt.Sprintf("作業時間となるのでミュートを行いました。次の作業時間は%sです。しっかり作業を進めてください。", nextTime))
+	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "作業時間となるのでミュートを行いました。")
+	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, fmt.Sprintf("次の作業時間は%sです。", nextTime))
+	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "しっかり作業を進めてください。")
 
 	if msg, err := ss.sess.ChannelMessageSendEmbed(ss.channelID, &discordgo.MessageEmbed{
 		Title:       "🚀作業時間です！",
@@ -244,7 +252,9 @@ func (ss *ServerStatus) Switch2Chat() {
 	ss.announceSpeaker = speakers[rand.Intn(len(speakers))]
 
 	nextTime := time.Now().Add(9 * time.Hour).Format("3時4分")
-	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, fmt.Sprintf("休憩時間となるのでミュートを解除しました。次の作業時間は%sです。それまでしっかり休みましょう。", nextTime))
+	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "休憩時間となるのでミュートを解除しました。")
+	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, fmt.Sprintf("次の作業時間は%sです。", nextTime))
+	ss.voiceConn.Speak(ss.announceSpeaker.Id, false, "それまでしっかり休みましょう。")
 
 	if msg, err := ss.sess.ChannelMessageSendEmbed(ss.channelID, &discordgo.MessageEmbed{
 		Title:       "🌿休憩時間です！",
