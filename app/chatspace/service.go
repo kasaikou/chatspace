@@ -69,6 +69,11 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 
 				// finalize eventListener
 				for _, ss := range serverStatuses {
+					for memberId := range ss.memberIDs {
+						if err := ss.sess.GuildMemberMute(ss.guildID, memberId, false); err != nil {
+							logger.Error("cannot unmute")
+						}
+					}
 					if err := ss.Close(); err != nil {
 						logger.Error("cannot close chatspace instance", zap.Error(err))
 					}
