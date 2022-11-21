@@ -6,7 +6,7 @@ on:
       - .github/workflows/deploy.yaml
       - Dockerfile
       - go.*
-      - "*.go"
+      - "**.go"
 env:
   REGISTRY: ghcr.io
   TAG: release
