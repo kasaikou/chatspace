@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/streamwest-1629/permanent-apps/lib/voicevox"
+	"github.com/streamwest-1629/chatspace/lib/voicevox"
 )
 
 type InitConfig = voicevox.InitConfig
