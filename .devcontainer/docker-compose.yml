@@ -18,6 +18,8 @@ services:
     #  - SYS_PTRACE
     # security_opt:
     #   - seccomp:unconfined
+    environment:
+      - DEBUG=1
 
     # Uncomment the next line to use a non-root user for all processes.
     user: vscode
