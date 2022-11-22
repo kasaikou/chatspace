@@ -162,7 +162,7 @@ func (ss *ServerStatus) onVoiceChangeUpdate(sess *discordgo.Session, event *disc
 	if event.ChannelID == ss.channelID {
 		if _, exist := ss.memberIDs[userId]; !exist {
 
-			ss.logger.Debug("Joined into chatspace", zap.String("userID", userId))
+			ss.logger.Debug("joined into chatspace", zap.String("userID", userId))
 			ss.memberIDs[userId] = struct{}{}
 
 			switch ss.mode {
@@ -180,7 +180,7 @@ func (ss *ServerStatus) onVoiceChangeUpdate(sess *discordgo.Session, event *disc
 	} else if event.BeforeUpdate.ChannelID == ss.channelID {
 
 		if _, exist := ss.memberIDs[userId]; exist {
-			ss.logger.Debug("Left from chatspace", zap.String("userID", userId))
+			ss.logger.Debug("left from chatspace", zap.String("userID", userId))
 			delete(ss.memberIDs, userId)
 
 			if len(ss.memberIDs) == 0 {
@@ -286,6 +286,5 @@ func (ss *ServerStatus) Close() error {
 	}); err != nil {
 		ss.logger.Error("failed send message", zap.String("channelID", msg.ChannelID), zap.Error(err))
 	}
-	ss.voiceConn.Close()
-	return nil
+	return ss.voiceConn.Close()
 }
