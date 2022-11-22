@@ -124,6 +124,7 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 				serverStatus, exist := serverStatuses[event.GuildID]
 				if exist {
 					if isClose := serverStatus.onVoiceChangeUpdate(sess, &event); isClose {
+						logger.Info("close the idled chatspace server", zap.String("guildID", event.GuildID))
 						if err := serverStatus.Close(); err != nil {
 							logger.Error("cannot close chatspace instance", zap.Error(err))
 						}
