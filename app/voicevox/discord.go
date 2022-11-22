@@ -35,13 +35,14 @@ func StartManagedDiscordVoiceConnection(appLogger *zap.Logger, sess *discordgo.S
 	}, nil
 }
 
-func (m *ManagedDiscordVoiceConnection) Close() {
+func (m *ManagedDiscordVoiceConnection) Close() error {
 	m.dvc.Quit()
 	if err := m.vc.Disconnect(); err != nil {
 		m.vc.Close()
-		return
+		return err
 	}
 	m.vc.Close()
+	return nil
 }
 
 func (m *ManagedDiscordVoiceConnection) Speak(speakerID int, waitSpeaked bool, content string) {
@@ -140,7 +141,7 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 	go func(queue <-chan speakQueueArgs) {
 		for {
 			select {
-			case wg := <-genQueueQuit:
+			case wg := <-speakQueueQuit:
 				defer wg.Done()
 				select {
 				case args := <-queue:
