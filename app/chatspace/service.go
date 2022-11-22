@@ -134,7 +134,6 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 			case <-ticker.C:
 
 				// Update schedule
-				logger.Debug("update event schedule")
 				if schedules.Len() > 2 {
 					if !sort.IsSorted(schedules) {
 						sort.Sort(schedules)

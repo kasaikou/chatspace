@@ -14,18 +14,32 @@ import (
 )
 
 var (
-	logger       *zap.Logger
-	environments map[string]string
+	logger *zap.Logger
 )
 
 func init() {
-	logger, _ = zap.NewDevelopment()
-	env, err := s3.LoadEnvCredentials()
-	if err != nil {
-		logger.Error(err.Error())
-		environments = nil
+	if val, exist := os.LookupEnv("DEBUG"); !exist || (exist && (val == "0" || val == "false" || val == "False" || val == "FALSE")) {
+		// production mode
+		logger, _ = zap.NewProduction()
+		logger.Info("initializing as production mode")
+
+		creds, err := s3.LoadEnvCredentials()
+		if err != nil {
+			logger.Error(err.Error())
+		} else {
+			for k, v := range creds {
+				os.Setenv(k, v)
+			}
+		}
+
+		chatspace.SetTimeStep(time.Minute)
+
 	} else {
-		environments = env
+		// development mode
+		logger, _ = zap.NewDevelopment()
+		logger.Info("initializing as debug mode")
+
+		chatspace.SetTimeStep(4 * time.Second)
 	}
 }
 
@@ -54,7 +68,6 @@ func main() {
 
 	// chatspace application
 	discordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
-	// discordToken := environments["CHATSPACE_DISCORD_TOKEN"]
 	controller, err := chatspace.NewService(logger, discordToken, vv)
 	if err != nil {
 		logger.Error("cannot start chatspace application", zap.String("discordToken", discordToken[:8]+"***"+discordToken[len(discordToken)-8:]), zap.Error(err))
@@ -72,12 +85,6 @@ func healthcheck(rw http.ResponseWriter, req *http.Request) {
 	// current time
 	current := time.Now().UTC().Format(time.RFC3339)
 
-	// environment variables
-	envKeys := make([]string, 0, len(environments))
-	for k := range environments {
-		envKeys = append(envKeys, k)
-	}
-
 	var resources interface{}
 	resources, err := util.Utilization()
 	if err != nil {
@@ -87,11 +94,7 @@ func healthcheck(rw http.ResponseWriter, req *http.Request) {
 	// format json
 	b, _ := json.Marshal(map[string]interface{}{
 		"currentTime": current,
-		"environments": map[string]interface{}{
-			"count": len(envKeys),
-			"keys":  envKeys,
-		},
-		"resources": resources,
+		"resources":   resources,
 	})
 
 	rw.Header().Set("Content-Type", "application/json")
