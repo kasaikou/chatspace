@@ -18,12 +18,17 @@ const (
 	serverStatusModeWork
 )
 
-const (
-	timeStep = time.Minute
-	// timeStep  = 4 * time.Second
+var (
+	timeStep  = time.Minute
 	chatTimes = 15 * timeStep
 	workTimes = 45 * timeStep
 )
+
+func SetTimeStep(ts time.Duration) {
+	timeStep = ts
+	chatTimes = 15 * timeStep
+	workTimes = 45 * timeStep
+}
 
 type ServerStatus struct {
 	lock              sync.Mutex
