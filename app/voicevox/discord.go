@@ -1,15 +1,21 @@
 package voicevox
 
 import (
+	"bufio"
+	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"layeh.com/gopus"
 )
 
 type ManagedDiscordVoiceConnection struct {
@@ -194,5 +200,104 @@ func (d *DiscordVoiceConnection) Speak(speakerID int, waitSpeaked bool, content 
 
 	if wg != nil {
 		wg.Wait()
+	}
+}
+
+type Killer interface {
+	Kill() error
+}
+
+const (
+	frameRate = 48000
+	frameSize = 960
+	channels  = 2
+	maxBytes  = 3840
+)
+
+func ffmpegConvert(wavReader io.Reader) (ffmpegout io.ReadCloser, processKiller Killer, err error) {
+
+	run := exec.Command("ffmpeg", "-i", "pipe:", "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
+	run.Stdin = wavReader
+	ffmpegout, err = run.StdoutPipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot ffmpeg stdout pipe: %w", err)
+	}
+
+	if err = run.Start(); err != nil {
+		return nil, nil, fmt.Errorf("failed run ffmpeg command: %w", err)
+	}
+
+	return ffmpegout, run.Process, nil
+}
+
+func playAudio(logger *zap.Logger, vcConn *discordgo.VoiceConnection, ffmpegout io.Reader, processKiller Killer) error {
+
+	ffmpegbuf := bufio.NewReaderSize(ffmpegout, 16384)
+	if err := vcConn.Speaking(true); err != nil {
+		return fmt.Errorf("could not speaking: %w", err)
+	}
+	defer func() {
+		if err := vcConn.Speaking(false); err != nil {
+			logger.Error("could not stop speaking: %w", zap.Error(err))
+		}
+	}()
+
+	send := make(chan []int16, 2)
+	defer close(send)
+
+	close := make(chan bool)
+	go func() {
+		if err := sendPCM(vcConn, send); err != nil {
+			logger.Error("playing audio error", zap.Error(err))
+		}
+		close <- true
+	}()
+
+	for {
+		audiobuf := make([]int16, frameSize*channels)
+		err := binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return err
+		}
+		if err != nil {
+			return fmt.Errorf("error from ffmpeg: %w", err)
+		}
+
+		select {
+		case send <- audiobuf:
+		case <-close:
+			processKiller.Kill()
+			return nil
+		}
+	}
+}
+
+func sendPCM(vcConn *discordgo.VoiceConnection, pcm <-chan []int16) error {
+	if pcm == nil {
+		return nil
+	}
+
+	opusEncoder, err := gopus.NewEncoder(frameRate, channels, gopus.Audio)
+	if err != nil {
+		return fmt.Errorf("cannot make opus encoder: %w", err)
+	}
+
+	for {
+
+		recv, ok := <-pcm
+		if !ok {
+			return nil
+		}
+
+		opus, err := opusEncoder.Encode(recv, frameSize, maxBytes)
+		if err != nil {
+			return fmt.Errorf("opus encoding error: %w", err)
+		} else if !vcConn.Ready {
+			return fmt.Errorf("voice connection is not ready")
+		} else if vcConn.OpusSend == nil {
+			return fmt.Errorf("opus sender is nil")
+		} else {
+			vcConn.OpusSend <- opus
+		}
 	}
 }
