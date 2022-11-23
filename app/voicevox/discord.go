@@ -123,17 +123,17 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 							speakUUIDQueueLock.Lock()
 							defer speakUUIDQueueLock.Unlock()
 							return speakUUIDQueue.Front()
-						}() == key {
+						}() != key {
 							time.Sleep(50 * time.Millisecond)
 						}
 
 						if err := playAudio(appLogger, vc, ffmpegout, process); err != nil {
 							appLogger.Error("cannot play audio", zap.Error(err))
 						}
-
 						func() {
 							speakUUIDQueueLock.Lock()
 							defer speakUUIDQueueLock.Unlock()
+
 							speakUUIDQueue.PopFront()
 						}()
 					}()
