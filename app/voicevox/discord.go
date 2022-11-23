@@ -125,7 +125,6 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 							return
 						}
 						defer ffmpegout.Close()
-						defer process.Kill()
 
 						for func() string {
 							speakUUIDQueueLock.Lock()
