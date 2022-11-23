@@ -8,3 +8,8 @@ services:
       - .env
     environment:
       - DEBUG=1
+    deploy:
+      resources:
+        limits:
+          memory: 2gb
+          cpus: "0.5"
