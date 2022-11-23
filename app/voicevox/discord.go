@@ -71,22 +71,15 @@ type generateVoiceArgs struct {
 
 func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConnection, voiceVox *VoiceVox, replaceFn func(input string) string) *DiscordVoiceConnection {
 
-	type speakQueueArgs struct {
-		binary  io.ReadCloser
-		process Killer
-		wg      *sync.WaitGroup
-	}
-
 	var (
 		genQueueQuit  = make(chan *sync.WaitGroup)
 		generateQueue = make(chan generateVoiceArgs)
-		speakQueue    = make(chan speakQueueArgs)
 	)
 
 	speakUUIDQueue := deque.New[string]()
 	speakUUIDQueueLock := sync.Mutex{}
 
-	go func(queue chan<- speakQueueArgs) {
+	go func() {
 		for {
 			select {
 			case wg := <-genQueueQuit:
@@ -131,7 +124,7 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 							defer speakUUIDQueueLock.Unlock()
 							return speakUUIDQueue.Front()
 						}() == key {
-							time.Sleep(time.Millisecond)
+							time.Sleep(50 * time.Millisecond)
 						}
 
 						if err := playAudio(appLogger, vc, ffmpegout, process); err != nil {
@@ -147,7 +140,7 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 				}()
 			}
 		}
-	}(speakQueue)
+	}()
 
 	return &DiscordVoiceConnection{
 		genQueueQuit:  genQueueQuit,
