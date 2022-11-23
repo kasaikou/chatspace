@@ -1,15 +1,20 @@
 package voicevox
 
 import (
+	"bufio"
+	"encoding/binary"
+	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"os/exec"
+	"strconv"
 	"sync"
+	"time"
 
-	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
+	"github.com/gammazero/deque"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"layeh.com/gopus"
 )
 
 type ManagedDiscordVoiceConnection struct {
@@ -54,9 +59,8 @@ func (m *ManagedDiscordVoiceConnection) GetSpeakers(nameFilter string, waitResum
 }
 
 type DiscordVoiceConnection struct {
-	genQueueQuit   chan<- *sync.WaitGroup
-	speakQueueQuit chan<- *sync.WaitGroup
-	generateQueue  chan<- generateVoiceArgs
+	genQueueQuit  chan<- *sync.WaitGroup
+	generateQueue chan<- generateVoiceArgs
 }
 
 type generateVoiceArgs struct {
@@ -67,19 +71,15 @@ type generateVoiceArgs struct {
 
 func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConnection, voiceVox *VoiceVox, replaceFn func(input string) string) *DiscordVoiceConnection {
 
-	type speakQueueArgs struct {
-		filename string
-		wg       *sync.WaitGroup
-	}
-
 	var (
-		genQueueQuit   = make(chan *sync.WaitGroup)
-		generateQueue  = make(chan generateVoiceArgs)
-		speakQueueQuit = make(chan *sync.WaitGroup)
-		speakQueue     = make(chan speakQueueArgs)
+		genQueueQuit  = make(chan *sync.WaitGroup)
+		generateQueue = make(chan generateVoiceArgs)
 	)
 
-	go func(queue chan<- speakQueueArgs) {
+	speakUUIDQueue := deque.New[string]()
+	speakUUIDQueueLock := sync.Mutex{}
+
+	go func() {
 		for {
 			select {
 			case wg := <-genQueueQuit:
@@ -87,82 +87,64 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 				return
 
 			case args := <-generateQueue:
-				sended := func() (sended bool) {
-					if replaceFn != nil {
-						args.content = replaceFn(args.content)
-					}
+				func() {
+					defer func() {
+						// finalize operation for call event ended
+						if args.wg != nil {
+							args.wg.Done()
+						}
+					}()
 
 					appLogger.Debug("voicevox generate request recieved", zap.String("content", args.content))
 
-					tempDir := filepath.Join(filepath.Dir(os.Args[0]), "./.tmp/")
 					wav, err := voiceVox.GenerateVoice(args.content, args.speakerID, false)
 					if err != nil {
 						appLogger.Error("failed to generate voice", zap.Int("speakerId", args.speakerID), zap.Error(err))
-						return false
+						return
 					}
-					defer wav.Close()
 
-					if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
-						if err != os.ErrExist {
-							appLogger.Error("failed to mkdir", zap.Error(err))
-							return false
+					key := uuid.NewString()
+					func() {
+						speakUUIDQueueLock.Lock()
+						defer speakUUIDQueueLock.Unlock()
+						speakUUIDQueue.PushBack(key)
+					}()
+
+					go func() {
+						defer wav.Close()
+						ffmpegout, process, err := ffmpegConvert(wav)
+						if err != nil {
+							appLogger.Error("convert error by ffmpeg", zap.Error(err))
+							return
 						}
-					}
+						defer ffmpegout.Close()
 
-					fileName := filepath.Join(tempDir, uuid.NewString()+".wav")
-					file, err := os.Create(fileName)
-					if err != nil {
-						appLogger.Error("failed to create wave file", zap.String("filename", fileName), zap.Error(err))
-						return false
-					}
-					defer file.Close()
+						for func() string {
+							speakUUIDQueueLock.Lock()
+							defer speakUUIDQueueLock.Unlock()
+							return speakUUIDQueue.Front()
+						}() != key {
+							time.Sleep(50 * time.Millisecond)
+						}
 
-					if _, err := io.Copy(file, wav); err != nil {
-						appLogger.Error("failed to save wave file", zap.String("filename", fileName), zap.Error(err))
-						return false
-					}
+						if err := playAudio(appLogger, vc, ffmpegout, process); err != nil {
+							appLogger.Error("cannot play audio", zap.Error(err))
+						}
+						func() {
+							speakUUIDQueueLock.Lock()
+							defer speakUUIDQueueLock.Unlock()
 
-					speakQueue <- speakQueueArgs{
-						filename: fileName,
-						wg:       args.wg,
-					}
-
-					return true
+							speakUUIDQueue.PopFront()
+						}()
+					}()
 				}()
-				if !sended {
-					if args.wg != nil {
-						args.wg.Done()
-					}
-				}
 			}
 		}
-	}(speakQueue)
-
-	go func(queue <-chan speakQueueArgs) {
-		for {
-			select {
-			case wg := <-speakQueueQuit:
-				defer wg.Done()
-				select {
-				case args := <-queue:
-					os.Remove(args.filename)
-				default:
-					return
-				}
-			case args := <-queue:
-				dgvoice.PlayAudioFile(vc, args.filename, make(chan bool))
-				os.Remove(args.filename)
-				if args.wg != nil {
-					args.wg.Done()
-				}
-			}
-		}
-	}(speakQueue)
+	}()
 
 	return &DiscordVoiceConnection{
-		genQueueQuit:   genQueueQuit,
-		speakQueueQuit: speakQueueQuit,
-		generateQueue:  generateQueue,
+		genQueueQuit:  genQueueQuit,
+		generateQueue: generateQueue,
 	}
 }
 
@@ -172,9 +154,6 @@ func (d *DiscordVoiceConnection) Quit() {
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		d.genQueueQuit <- &wg
-		wg.Wait()
-		wg.Add(1)
-		d.speakQueueQuit <- &wg
 		wg.Wait()
 	}
 }
@@ -194,5 +173,104 @@ func (d *DiscordVoiceConnection) Speak(speakerID int, waitSpeaked bool, content 
 
 	if wg != nil {
 		wg.Wait()
+	}
+}
+
+type Killer interface {
+	Kill() error
+}
+
+const (
+	frameRate = 48000
+	frameSize = 960
+	channels  = 2
+	maxBytes  = 3840
+)
+
+func ffmpegConvert(wavReader io.Reader) (ffmpegout io.ReadCloser, processKiller Killer, err error) {
+
+	run := exec.Command("ffmpeg", "-i", "pipe:", "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
+	run.Stdin = wavReader
+	ffmpegout, err = run.StdoutPipe()
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot ffmpeg stdout pipe: %w", err)
+	}
+
+	if err = run.Start(); err != nil {
+		return nil, nil, fmt.Errorf("failed run ffmpeg command: %w", err)
+	}
+
+	return ffmpegout, run.Process, nil
+}
+
+func playAudio(logger *zap.Logger, vcConn *discordgo.VoiceConnection, ffmpegout io.Reader, processKiller Killer) error {
+
+	ffmpegbuf := bufio.NewReaderSize(ffmpegout, 16384)
+	if err := vcConn.Speaking(true); err != nil {
+		return fmt.Errorf("could not speaking: %w", err)
+	}
+	defer func() {
+		if err := vcConn.Speaking(false); err != nil {
+			logger.Error("could not stop speaking: %w", zap.Error(err))
+		}
+	}()
+
+	send := make(chan []int16, 2)
+	defer close(send)
+
+	close := make(chan bool)
+	go func() {
+		if err := sendPCM(vcConn, send); err != nil {
+			logger.Error("playing audio error", zap.Error(err))
+		}
+		close <- true
+	}()
+
+	for {
+		audiobuf := make([]int16, frameSize*channels)
+		err := binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return err
+		}
+		if err != nil {
+			return fmt.Errorf("error from ffmpeg: %w", err)
+		}
+
+		select {
+		case send <- audiobuf:
+		case <-close:
+			processKiller.Kill()
+			return nil
+		}
+	}
+}
+
+func sendPCM(vcConn *discordgo.VoiceConnection, pcm <-chan []int16) error {
+	if pcm == nil {
+		return nil
+	}
+
+	opusEncoder, err := gopus.NewEncoder(frameRate, channels, gopus.Audio)
+	if err != nil {
+		return fmt.Errorf("cannot make opus encoder: %w", err)
+	}
+
+	for {
+
+		recv, ok := <-pcm
+		if !ok {
+			return nil
+		}
+
+		opus, err := opusEncoder.Encode(recv, frameSize, maxBytes)
+		if err != nil {
+			return fmt.Errorf("opus encoding error: %w", err)
+		} else if !vcConn.Ready {
+			return fmt.Errorf("voice connection is not ready")
+		} else if vcConn.OpusSend == nil {
+			return fmt.Errorf("opus sender is nil")
+		} else {
+			vcConn.OpusSend <- opus
+		}
 	}
 }

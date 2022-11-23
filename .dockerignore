@@ -1,8 +1,10 @@
 .devcontainer
 .git
+.gitignore
 .github
 .dockerignore
 Dockerfile
+*.env
 *.md
 *.yml
 *.yaml
