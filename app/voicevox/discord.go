@@ -8,8 +8,11 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/gammazero/deque"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"layeh.com/gopus"
 )
@@ -80,6 +83,9 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 		speakQueue    = make(chan speakQueueArgs)
 	)
 
+	speakUUIDQueue := deque.New[string]()
+	speakUUIDQueueLock := sync.Mutex{}
+
 	go func(queue chan<- speakQueueArgs) {
 		for {
 			select {
@@ -104,6 +110,13 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 						return
 					}
 
+					key := uuid.NewString()
+					func() {
+						speakUUIDQueueLock.Lock()
+						defer speakUUIDQueueLock.Unlock()
+						speakUUIDQueue.PushBack(key)
+					}()
+
 					go func() {
 						defer wav.Close()
 						ffmpegout, process, err := ffmpegConvert(wav)
@@ -114,9 +127,23 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 						defer ffmpegout.Close()
 						defer process.Kill()
 
+						for func() string {
+							speakUUIDQueueLock.Lock()
+							defer speakUUIDQueueLock.Unlock()
+							return speakUUIDQueue.Front()
+						}() == key {
+							time.Sleep(time.Millisecond)
+						}
+
 						if err := playAudio(appLogger, vc, ffmpegout, process); err != nil {
 							appLogger.Error("cannot play audio", zap.Error(err))
 						}
+
+						func() {
+							speakUUIDQueueLock.Lock()
+							defer speakUUIDQueueLock.Unlock()
+							speakUUIDQueue.PopFront()
+						}()
 					}()
 				}()
 			}
