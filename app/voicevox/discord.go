@@ -102,6 +102,7 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 						appLogger.Error("failed to generate voice", zap.Int("speakerId", args.speakerID), zap.Error(err))
 						return
 					}
+					appLogger.Debug("voicevox generate finished", zap.String("content", args.content))
 
 					key := uuid.NewString()
 					func() {
@@ -112,12 +113,14 @@ func StartDiscordVoiceConnection(appLogger *zap.Logger, vc *discordgo.VoiceConne
 
 					go func() {
 						defer wav.Close()
+						appLogger.Debug("ffmpeg convert request start", zap.String("content", args.content))
 						ffmpegout, process, err := ffmpegConvert(wav)
 						if err != nil {
 							appLogger.Error("convert error by ffmpeg", zap.Error(err))
 							return
 						}
 						defer ffmpegout.Close()
+						appLogger.Debug("ffmpeg convert finished", zap.String("content", args.content))
 
 						for func() string {
 							speakUUIDQueueLock.Lock()
@@ -191,6 +194,8 @@ func ffmpegConvert(wavReader io.Reader) (ffmpegout io.ReadCloser, processKiller 
 
 	run := exec.Command("ffmpeg", "-i", "pipe:", "-f", "s16le", "-ar", strconv.Itoa(frameRate), "-ac", strconv.Itoa(channels), "pipe:1")
 	run.Stdin = wavReader
+	// binary := bytes.NewBuffer([]byte{})
+	// run.Stdout = binary
 	ffmpegout, err = run.StdoutPipe()
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot ffmpeg stdout pipe: %w", err)
@@ -201,6 +206,7 @@ func ffmpegConvert(wavReader io.Reader) (ffmpegout io.ReadCloser, processKiller 
 	}
 
 	return ffmpegout, run.Process, nil
+	// return io.NopCloser(binary), run.Process, nil
 }
 
 func playAudio(logger *zap.Logger, vcConn *discordgo.VoiceConnection, ffmpegout io.Reader, processKiller Killer) error {
@@ -230,7 +236,7 @@ func playAudio(logger *zap.Logger, vcConn *discordgo.VoiceConnection, ffmpegout 
 		audiobuf := make([]int16, frameSize*channels)
 		err := binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			return err
+			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("error from ffmpeg: %w", err)
