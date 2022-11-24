@@ -1,4 +1,4 @@
-package chatspace
+package util
 
 import (
 	"regexp"
@@ -6,7 +6,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func spliter(input string) []string {
+func WordSpliter(input string) []string {
 	splitWords := map[string]struct{}{
 		"。":  {},
 		"、":  {},
@@ -38,7 +38,7 @@ func spliter(input string) []string {
 	return results
 }
 
-func replaceMsgFunc(sess *discordgo.Session) func(string) string {
+func ReplaceMsgFunc(sess *discordgo.Session) func(string) string {
 
 	reg := regexp.MustCompile(`https?://[\w!?/+\-_~;.,*&@#$%()'[\]]+`)
 
