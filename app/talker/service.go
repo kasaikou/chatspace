@@ -71,7 +71,7 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 			case event := <-messageCreateListener:
 
 				currentChannelId := ""
-				guildMemberJoinVCs, joined := memberJoinVCs[app.GuildID]
+				guildMemberJoinVCs, joined := memberJoinVCs[event.GuildID]
 				if joined {
 					currentChannelId = guildMemberJoinVCs[event.Author.ID]
 				}
@@ -243,10 +243,16 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 				if event.ChannelID == "" {
 					delete(guildMemberJoinVCs, event.Member.User.ID)
 				} else {
-					guildMemberJoinVCs[event.Member.User.ID] = event.Member.User.ID
+					guildMemberJoinVCs[event.Member.User.ID] = event.ChannelID
 				}
 
 				if ss, exist := serverStatuses[event.GuildID]; exist {
+					if event.ChannelID == ss.voiceConn.ChannelID {
+						ss.memberIds[event.Member.User.ID] = struct{}{}
+					} else {
+						delete(ss.memberIds, event.Member.User.ID)
+					}
+
 					currentChannelIdCount := 0
 					for _, channelId := range guildMemberJoinVCs {
 						if ss.voiceConn.ChannelID == channelId {
