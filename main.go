@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/streamwest-1629/chatspace/app/chatspace"
+	"github.com/streamwest-1629/chatspace/app/talker"
 	"github.com/streamwest-1629/chatspace/app/voicevox"
 	"github.com/streamwest-1629/chatspace/lib/s3"
 	"github.com/streamwest-1629/chatspace/util"
@@ -76,11 +77,11 @@ func main() {
 
 	// creato application
 	creatoDiscordToken := os.Getenv("CREATO_DISCORD_TOKEN")
-	talker, err := chatspace.NewService(logger, creatoDiscordToken, vv)
+	creato, err := talker.NewService(logger, creatoDiscordToken, vv)
 	if err != nil {
 		logger.Error("cannot start creato application", zap.String("discordToken", creatoDiscordToken[:8]+"***"+creatoDiscordToken[len(creatoDiscordToken)-8:]), zap.Error(err))
 	}
-	defer talker.Close()
+	defer creato.Close()
 
 	if err := http.ListenAndServe(":80", nil); err != nil {
 		logger.Fatal("listen server is ended", zap.Error(err))
