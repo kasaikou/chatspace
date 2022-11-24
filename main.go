@@ -67,12 +67,20 @@ func main() {
 	}
 
 	// chatspace application
-	discordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
-	controller, err := chatspace.NewService(logger, discordToken, vv)
+	chatDiscordToken := os.Getenv("CHATSPACE_DISCORD_TOKEN")
+	chat, err := chatspace.NewService(logger, chatDiscordToken, vv)
 	if err != nil {
-		logger.Error("cannot start chatspace application", zap.String("discordToken", discordToken[:8]+"***"+discordToken[len(discordToken)-8:]), zap.Error(err))
+		logger.Error("cannot start chatspace application", zap.String("discordToken", chatDiscordToken[:8]+"***"+chatDiscordToken[len(chatDiscordToken)-8:]), zap.Error(err))
 	}
-	defer controller.Close()
+	defer chat.Close()
+
+	// creato application
+	creatoDiscordToken := os.Getenv("CREATO_DISCORD_TOKEN")
+	talker, err := chatspace.NewService(logger, creatoDiscordToken, vv)
+	if err != nil {
+		logger.Error("cannot start creato application", zap.String("discordToken", creatoDiscordToken[:8]+"***"+creatoDiscordToken[len(creatoDiscordToken)-8:]), zap.Error(err))
+	}
+	defer talker.Close()
 
 	if err := http.ListenAndServe(":80", nil); err != nil {
 		logger.Fatal("listen server is ended", zap.Error(err))
