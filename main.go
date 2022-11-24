@@ -74,7 +74,7 @@ func main() {
 	}
 	defer controller.Close()
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":80", nil); err != nil {
 		logger.Fatal("listen server is ended", zap.Error(err))
 	}
 }

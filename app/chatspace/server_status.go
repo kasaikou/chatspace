@@ -8,6 +8,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/streamwest-1629/chatspace/app/voicevox"
+	"github.com/streamwest-1629/chatspace/util"
 	"go.uber.org/zap"
 )
 
@@ -57,7 +58,7 @@ func NewServerStatus(baseLogger *zap.Logger, sess *discordgo.Session, voicevoxAp
 	vc, err := voicevox.StartManagedDiscordVoiceConnection(
 		baseLogger.With(zap.String("feature", "voicevoxRequest")),
 		sess, guildID, channelID, voicevoxApp,
-		replaceMsgFunc(sess),
+		util.ReplaceMsgFunc(sess),
 	)
 
 	if err != nil {
@@ -118,7 +119,7 @@ func (ss *ServerStatus) onMessageCreate(sess *discordgo.Session, event *discordg
 			ss.memberVoiceIDs[userId] = id
 		}
 
-		splited := spliter(event.ContentWithMentionsReplaced())
+		splited := util.WordSpliter(event.ContentWithMentionsReplaced())
 
 		for _, split := range splited {
 			ss.voiceConn.Speak(id, false, split)
