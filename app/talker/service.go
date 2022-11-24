@@ -60,7 +60,7 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 
 	go func() {
 		logger := baseLogger.With(zap.String("feature", "eventListener"))
-		vcMonitors := map[string]*GuildVCMonitor{}
+		memberJoinVCs := map[string]map[string]string{}
 		serverStatuses := map[string]*joinedServerStatus{}
 
 		for {
@@ -70,14 +70,14 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 				return
 			case event := <-messageCreateListener:
 
-				currentState := &discordgo.VoiceState{}
-				vcMonitor, joined := vcMonitors[event.GuildID]
+				currentChannelId := ""
+				guildMemberJoinVCs, joined := memberJoinVCs[app.GuildID]
 				if joined {
-					currentState = vcMonitor.MemberVoiceState(event.Author.ID)
+					currentChannelId = guildMemberJoinVCs[event.Author.ID]
 				}
 
 				if sc.IsMentioned(event) {
-					if currentState.ChannelID == "" {
+					if currentChannelId == "" {
 						SendMessage(
 							sess, logger, event.ID, event.ChannelID,
 							strings.Join([]string{"😑", "ボイスチャンネルに入室しているときのみ利用可能です"}, " "),
@@ -88,7 +88,7 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 
 					serverStatus, exist := serverStatuses[event.GuildID]
 					if exist {
-						if serverStatus.voiceConn.ChannelID != currentState.ChannelID {
+						if serverStatus.voiceConn.ChannelID != currentChannelId {
 							SendMessage(
 								sess, logger, event.ID, event.ChannelID,
 								strings.Join([]string{"💔", "他のボイスチャンネルにいるので動けません"}, " "),
@@ -96,7 +96,7 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 							)
 						}
 					} else {
-						if ss, err := newJoinedServerStatus(baseLogger, sess, voicevoxApp, &event, currentState.ChannelID); err != nil {
+						if ss, err := newJoinedServerStatus(baseLogger, sess, voicevoxApp, &event, currentChannelId); err != nil {
 							logger.Error("failed start server", zap.Error(err))
 						} else {
 							serverStatus = ss
@@ -224,30 +224,47 @@ func NewService(baseLogger *zap.Logger, discordToken string, voicevoxApp *voicev
 
 					if serverStatus, exist := serverStatuses[event.GuildID]; !exist {
 						break
-					} else if serverStatus.voiceConn.ChannelID == currentState.ChannelID {
+					} else if serverStatus.voiceConn.ChannelID == currentChannelId {
 						serverStatus.Speak(&event)
 					}
 				}
 
 			case event := <-voiceStateUpdateListener:
-				monitor, exist := vcMonitors[event.GuildID]
+				guildMemberJoinVCs, exist := memberJoinVCs[event.GuildID]
 				if !exist {
-					monitor = NewGuildVCMonitor(event.GuildID, []string{})
-					vcMonitors[event.GuildID] = monitor
+					guildMemberJoinVCs = map[string]string{}
+					memberJoinVCs[event.GuildID] = guildMemberJoinVCs
 				}
 
-				if monitor.VoiceStateUpdate(event) == VoiceStateUpdateTypeLeave {
-					if ss, exist := serverStatuses[event.GuildID]; exist {
-						if len(monitor.VCJoinedMemberIDs(ss.voiceConn.ChannelID)) == 0 {
-							logger.Info("close empty voice channel server")
-							ss.Close()
-							delete(serverStatuses, event.GuildID)
+				if event.BeforeUpdate == nil {
+					event.BeforeUpdate = &discordgo.VoiceState{}
+				}
+
+				if event.ChannelID == "" {
+					delete(guildMemberJoinVCs, event.Member.User.ID)
+				} else {
+					guildMemberJoinVCs[event.Member.User.ID] = event.Member.User.ID
+				}
+
+				if ss, exist := serverStatuses[event.GuildID]; exist {
+					currentChannelIdCount := 0
+					for _, channelId := range guildMemberJoinVCs {
+						if ss.voiceConn.ChannelID == channelId {
+							currentChannelIdCount++
 						}
 					}
 
-					if monitor.NumJoinedMembers() == 0 {
-						delete(vcMonitors, event.GuildID)
+					if currentChannelIdCount == 0 {
+						logger.Info("close empty voice channel server")
+						ss.Close()
+						delete(serverStatuses, event.GuildID)
 					}
+				}
+
+				if len(guildMemberJoinVCs) == 0 {
+					delete(memberJoinVCs, event.GuildID)
+				} else {
+					memberJoinVCs[event.GuildID] = guildMemberJoinVCs
 				}
 			}
 		}
