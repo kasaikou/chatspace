@@ -7,6 +7,7 @@ on:
       - Dockerfile
       - go.*
       - "**.go"
+  workflow_dispach:
 env:
   REGISTRY: ghcr.io
   TAG: release
@@ -15,6 +16,7 @@ jobs:
     name: Build image
     runs-on: ubuntu-latest
     permissions:
+      id-token: write
       contents: read
       packages: write
     steps:
@@ -37,7 +39,7 @@ jobs:
             type=raw,value=${{ github.sha }}
             type=schedule,pattern={{date 'YYYYMMDD-HHmmss' }},prefix=at-
             type=raw,value=${{ env.TAG }}
-      - name: 
+      - name: Build and Push image
         uses: docker/build-push-action@v3
         with:
           push: true
@@ -46,3 +48,26 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+      - name: Describe previous ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+          --task-definition ${{ secrets.AWS_DEPLOY_TASK_DEFINITION }} \
+          --query taskDefinition > task-definition.json
+      - name: Make ECS task definition
+        id: task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          image: ${{ env.REGISTRY }}/${{ github.repository }}:${{ github.sha }}
+          container-name: execute
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-definition.outputs.task-definition }}
+          service: ${{ secrets.AWS_DEPLOY_SERVICE_NAME }}
+          cluster: ${{ secrets.AWS_DEPLOY_CLUSTER_NAME }}
+          wait-for-service-stability: true
