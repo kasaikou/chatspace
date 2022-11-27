@@ -58,7 +58,7 @@ jobs:
       - name: Describe previous ECS task definition
         run: |
           aws ecs describe-task-definition \
-          --task-definition ${{ secrets.AWS_DEPLOY_TASK_DEFINITION }} \
+          --task-definition ${{ secrets.AWS_DEPLOY_TASK_DEFINITION_NAME }} \
           --query taskDefinition > task-definition.json
       - name: Make ECS task definition
         id: task-definition
