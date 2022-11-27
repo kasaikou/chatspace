@@ -17,6 +17,12 @@ func WordSpliter(input string) []string {
 		"\n": {},
 		" ":  {},
 		"　":  {},
+		"「":  {},
+		"」":  {},
+		"『":  {},
+		"』":  {},
+		"\"": {},
+		"・":  {},
 	}
 
 	inputRune := []rune(input)
@@ -24,10 +30,13 @@ func WordSpliter(input string) []string {
 	result := ""
 
 	for i := 0; i < len(inputRune); i++ {
-		result = result + string(inputRune[i])
-		if _, exist := splitWords[string(inputRune[i])]; exist && result != "" {
-			results = append(results, result)
-			result = ""
+		if _, exist := splitWords[string(inputRune[i])]; exist {
+			if result != "" {
+				results = append(results, result)
+				result = ""
+			}
+		} else {
+			result = result + string(inputRune[i])
 		}
 	}
 
