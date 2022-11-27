@@ -7,7 +7,7 @@ on:
       - Dockerfile
       - go.*
       - "**.go"
-  workflow_dispach:
+  workflow_dispatch:
 env:
   REGISTRY: ghcr.io
   TAG: release
